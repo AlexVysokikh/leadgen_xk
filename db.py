@@ -203,6 +203,47 @@ def get_all_companies(limit=500):
         print(f"Ошибка при получении списка компаний: {error}")
         return []
 
+def get_stats() -> dict:
+    """Возвращает количество компаний по каждому статусу."""
+    try:
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT status, COUNT(*) FROM companies GROUP BY status"
+            )
+            rows = cursor.fetchall()
+            return {row[0]: row[1] for row in rows}
+    except sqlite3.Error as error:
+        print(f"Ошибка при получении статистики: {error}")
+        return {}
+
+
+def get_companies(limit: int = 500):
+    """Алиас для get_all_companies — совместимость с main_app.py."""
+    return get_all_companies(limit)
+
+
+def get_company(company_id: int):
+    """Возвращает компанию по id в виде словаря или None."""
+    try:
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT id, name, category, address, phone, website,
+                       email, telegram, website_text, offer_text, status, created_at
+                FROM companies WHERE id = ?
+                """,
+                (company_id,),
+            )
+            row = cursor.fetchone()
+            if row is None:
+                return None
+            return _rows_to_dicts([row])[0]
+    except sqlite3.Error as error:
+        print(f"Ошибка при получении компании id={company_id}: {error}")
+        return None
+
 
 if __name__ == '__main__':
     init_db()
