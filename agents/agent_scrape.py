@@ -1,5 +1,4 @@
 """Агент парсинга сайтов компаний для поиска контактов."""
-
 import random
 import re
 import sys
@@ -35,19 +34,16 @@ def _extract_contacts(text: str) -> tuple[str, str]:
 
     email = email_match.group(0) if email_match else ""
     telegram = ""
-
     if telegram_match:
         username = telegram_match.group(1) or telegram_match.group(2) or ""
         if username:
             telegram = f"@{username}"
-
     return email, telegram
 
 
-def scrape_new_companies(batch: int = 20):
+def scrape_new_companies(batch: int = 20) -> int:
     """Парсит сайты компаний со статусом new и сохраняет найденные контакты в БД."""
     companies = get_companies_by_status("new", batch)
-
     processed_count = 0
     contacts_found_count = 0
     error_count = 0
@@ -69,7 +65,6 @@ def scrape_new_companies(batch: int = 20):
                 headers=REQUEST_HEADERS,
             )
             response.raise_for_status()
-
             soup = BeautifulSoup(response.text, "html.parser")
 
             # Удаляем скрипты и стили, чтобы не мешали анализу текста страницы
@@ -95,6 +90,7 @@ def scrape_new_companies(batch: int = 20):
             error_count += 1
             print(f"Ошибка у {company_name}: {error}")
 
+        # Счётчик увеличивается после каждой итерации (успех или ошибка)
         processed_count += 1
 
         # Добавляем случайную паузу между запросами к сайтам
@@ -103,6 +99,7 @@ def scrape_new_companies(batch: int = 20):
     print(
         f"Обработано: {processed_count}, найдено контактов: {contacts_found_count}, ошибок: {error_count}"
     )
+    return processed_count
 
 
 if __name__ == '__main__':
