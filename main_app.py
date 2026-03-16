@@ -36,10 +36,10 @@ except ImportError as e:
     send_approved = None
 
 try:
-    from db import get_companies, get_companies_by_status, update_company, get_company
+    from db import get_all_companies, get_companies_by_status, update_company, get_stats
 except ImportError as e:
     st.error(f"❌ Ошибка импорта db: {e}")
-    get_companies = get_companies_by_status = update_company = get_company = None
+    get_all_companies = get_companies_by_status = update_company = get_stats = None
 
 # Константы для быстрого выбора районов Москвы
 MOSCOW_DISTRICTS = {
@@ -71,19 +71,19 @@ section = st.sidebar.radio(
 # ============================================================
 if section == "🔍 Поиск":
     st.header("🔍 Поиск лидов")
-    
+
     # Тип бизнеса
     business_type = st.text_input(
         "Тип бизнеса",
         placeholder="например: кафе, стоматология, фитнес"
     )
-    
+
     # Быстрый выбор района
     district = st.selectbox(
         "Быстрый выбор района Москвы",
         list(MOSCOW_DISTRICTS.keys())
     )
-    
+
     # Поле ввода bbox
     default_bbox = MOSCOW_DISTRICTS.get(district, "")
     bbox = st.text_input(
@@ -92,7 +92,7 @@ if section == "🔍 Поиск":
         placeholder="37.55,55.70~37.72,55.79"
     )
     st.caption("Координаты прямоугольника: lon1,lat1~lon2,lat2 (нижний левый ~ верхний правый)")
-    
+
     # Кнопка поиска
     if st.button("🔍 Найти компании"):
         if not business_type:
@@ -114,16 +114,16 @@ if section == "🔍 Поиск":
 # ============================================================
 elif section == "📋 База лидов":
     st.header("📋 База лидов")
-    
-    if get_companies is None or get_companies_by_status is None:
+
+    if get_all_companies is None or get_companies_by_status is None:
         st.error("❌ Модуль db не загружен")
     else:
         # Метрики по статусам
         try:
-            all_companies = get_companies()
+            all_companies = get_all_companies()
             statuses = ["new", "scraped", "needs_approval", "approved", "sent"]
             counts = {s: len([c for c in all_companies if c.get("status") == s]) for s in statuses}
-            
+
             col1, col2, col3, col4, col5 = st.columns(5)
             col1.metric("New", counts["new"])
             col2.metric("Scraped", counts["scraped"])
@@ -132,20 +132,20 @@ elif section == "📋 База лидов":
             col5.metric("Sent", counts["sent"])
         except Exception as e:
             st.warning(f"⚠️ Не удалось загрузить метрики: {e}")
-        
+
         # Фильтр по статусу
         status_filter = st.selectbox(
             "Фильтр по статусу",
             ["Все", "new", "scraped", "needs_approval", "approved", "sent", "no_site", "error"]
         )
-        
+
         # Получение данных
         try:
             if status_filter == "Все":
-                companies = get_companies()
+                companies = get_all_companies()
             else:
                 companies = get_companies_by_status(status_filter)
-            
+
             # Таблица
             if companies:
                 import pandas as pd
@@ -165,30 +165,29 @@ elif section == "📋 База лидов":
 # ============================================================
 elif section == "✏️ Модерация КП":
     st.header("✏️ Модерация КП")
-    
+
     if get_companies_by_status is None or update_company is None:
         st.error("❌ Модуль db не загружен")
     else:
         try:
             companies = get_companies_by_status("needs_approval")
-            
             if not companies:
                 st.info("Нет КП на модерации")
             else:
                 # Кнопка одобрить все
                 if st.button("✅ Одобрить все без изменений"):
                     for c in companies:
-                        update_company(c["id"], {"status": "approved"})
+                        update_company(c["id"], status="approved")
                     st.success(f"✅ Одобрено {len(companies)} КП")
                     st.rerun()
-                
+
                 # Модерация каждой компании
                 for company in companies:
                     with st.expander(f"{company.get('name', 'Без названия')} — {company.get('category', 'Категория не указана')}"):
                         st.write(f"**Адрес:** {company.get('address', 'Не указан')}")
                         st.write(f"**Телефон:** {company.get('phone', 'Не указан')}")
                         st.write(f"**Сайт:** {company.get('website', 'Не указан')}")
-                        
+
                         # Редактирование текста КП
                         offer_text = st.text_area(
                             "Текст коммерческого предложения:",
@@ -196,13 +195,10 @@ elif section == "✏️ Модерация КП":
                             height=200,
                             key=f"offer_{company['id']}"
                         )
-                        
+
                         # Кнопка одобрить
                         if st.button(f"✅ Одобрить", key=f"approve_{company['id']}"):
-                            update_company(company["id"], {
-                                "offer_text": offer_text,
-                                "status": "approved"
-                            })
+                            update_company(company["id"], offer_text=offer_text, status="approved")
                             st.success("Одобрено!")
                             st.rerun()
         except Exception as e:
@@ -213,9 +209,9 @@ elif section == "✏️ Модерация КП":
 # ============================================================
 elif section == "⚙️ Управление":
     st.header("⚙️ Управление агентами")
-    
+
     col1, col2, col3 = st.columns(3)
-    
+
     # Кнопка 1: Собрать контакты
     with col1:
         if st.button("🌐 Собрать контакты с сайтов"):
@@ -228,7 +224,7 @@ elif section == "⚙️ Управление":
                     st.success(f"✅ Обработано {count} компаний")
                 except Exception as e:
                     st.error(f"❌ Ошибка: {e}")
-    
+
     # Кнопка 2: Сгенерировать КП
     with col2:
         if st.button("🤖 Сгенерировать КП"):
@@ -237,11 +233,11 @@ elif section == "⚙️ Управление":
             else:
                 try:
                     with st.spinner("Генерируем КП..."):
-                        count = generate_offers(batch=20)
-                    st.success(f"✅ Сгенерировано {count} КП")
+                        result = generate_offers(batch=20)
+                    st.success(f"✅ Сгенерировано {len(result)} КП")
                 except Exception as e:
                     st.error(f"❌ Ошибка: {e}")
-    
+
     # Кнопка 3: Симулировать рассылку
     with col3:
         if st.button("📤 Симулировать рассылку"):
@@ -250,23 +246,23 @@ elif section == "⚙️ Управление":
             else:
                 try:
                     with st.spinner("Отправляем КП..."):
-                        count = send_approved(batch=10)
-                    st.success(f"✅ Отправлено {count} КП")
+                        send_approved(batch=10)
+                    st.success("✅ Рассылка завершена")
                 except Exception as e:
                     st.error(f"❌ Ошибка: {e}")
-    
+
     # Статистика
     st.subheader("📊 Текущая статистика")
-    try:
-        from db import get_stats
-        stats = get_stats()
-        if stats:
-            import pandas as pd
-            df_stats = pd.DataFrame([stats])
-            st.table(df_stats)
-        else:
-            st.info("Статистика пока недоступна")
-    except ImportError:
-        st.warning("⚠️ Функция get_stats() не найдена в модуле db")
-    except Exception as e:
-        st.warning(f"⚠️ Не удалось загрузить статистику: {e}")
+    if get_stats is None:
+        st.warning("⚠️ Функция get_stats() не загружена")
+    else:
+        try:
+            stats = get_stats()
+            if stats:
+                import pandas as pd
+                df_stats = pd.DataFrame([stats])
+                st.table(df_stats)
+            else:
+                st.info("Статистика пока недоступна")
+        except Exception as e:
+            st.warning(f"⚠️ Не удалось загрузить статистику: {e}")
