@@ -18,8 +18,8 @@
 1. Скопируйте файл `.env.example` в корне проекта и переименуйте копию в `.env`.
 2. Откройте `.env` и вставьте ваши реальные ключи:
    - `YANDEX_API_KEY` — ключ API Яндекс Карт (получить на [developer.tech.yandex.ru](https://developer.tech.yandex.ru))
-   - `OPENAI_API_KEY` — ваш API ключ BotHub (получить на [bothub.chat](https://bothub.chat))
-   - `OPENAI_BASE_URL` — `https://bothub.chat/api/v2/openai/v1`
+      - `OPENAI_API_KEY` — ваш ключ API OpenAI (получить на [platform.openai.com](https://platform.openai.com/api-keys))
+      - `OPENAI_BASE_URL` — оставьте пустым, если используете нативный OpenAI API (опционально)
 
 ## Шаг 4 — Запустить админку
 В терминале Cursor выполните команду:
