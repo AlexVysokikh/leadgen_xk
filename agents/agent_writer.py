@@ -1,5 +1,4 @@
 """Агент генерации коммерческих предложений через OpenAI."""
-
 import os
 import random
 import sys
@@ -19,17 +18,19 @@ from db import get_companies_by_status, update_company  # noqa: E402
 # Загружаем переменные окружения из .env в корне проекта
 load_dotenv(ROOT_DIR / ".env")
 
-# Инициализируем клиент OpenAI из переменных окружения
+# Инициализируем клиент OpenAI
+# Если OPENAI_BASE_URL не задан — используется официальный api.openai.com
+_base_url = os.getenv("OPENAI_BASE_URL", "").strip() or None
 client = OpenAI(
     api_key=os.getenv("OPENAI_API_KEY", "").strip(),
-    base_url=os.getenv("OPENAI_BASE_URL", "").strip() or None,
+    base_url=_base_url,
 )
 
 
 def _build_prompt(company: dict) -> str:
     """Формирует промпт для генерации коммерческого предложения."""
-    return f'''Ты менеджер по продажам компании "Кубик Медиа" — сервис индор-рекламы
-(цифровые экраны внутри торговых центров, бизнес-центров, фитнес-клубов).
+    return f'''Ты менеджер по продажам компании "ХК Медиа" — сервис гиперлокальной индор-рекламы
+(цифровые экраны внутри кафе, ТЦ, бизнес-центров, фитнес-клубов Москвы).
 
 Данные о потенциальном клиенте:
 Компания: {company.get("name", "")}
@@ -40,8 +41,7 @@ def _build_prompt(company: dict) -> str:
 Напиши короткое живое сообщение (4-5 предложений) с предложением о сотрудничестве.
 Используй конкретные детали из текста сайта, чтобы показать что ты изучил их бизнес.
 Цель сообщения — договориться о коротком созвоне на 15 минут.
-Не используй шаблонные фразы и канцелярит.
-Пиши по-русски, деловито но по-человечески.'''
+Не используй шаблонные фразы и канцелярит. Пиши по-русски, деловито но по-человечески.'''
 
 
 def generate_offers(batch: int = 20):
@@ -53,19 +53,16 @@ def generate_offers(batch: int = 20):
 
     companies = get_companies_by_status("scraped", batch)
     total_count = len(companies)
-
     if total_count == 0:
         print("Нет компаний со статусом 'scraped' для генерации КП")
         print("Сгенерировано КП: 0 из 0 компаний")
         return []
 
     generated_items = []
-
     for company in companies:
         company_id = company.get("id")
         company_name = company.get("name") or "Без названия"
         prompt = _build_prompt(company)
-
         try:
             response = client.chat.completions.create(
                 model="gpt-4o-mini",
@@ -73,18 +70,15 @@ def generate_offers(batch: int = 20):
                 max_tokens=300,
                 temperature=0.8,
             )
-
             offer_text = (response.choices[0].message.content or "").strip()
             if not offer_text:
                 raise ValueError("Пустой ответ модели")
-
             update_company(company_id, offer_text=offer_text, status="needs_approval")
             generated_items.append({"company": company, "offer_text": offer_text})
             print(f"✅ КП сгенерировано для [{company_name}]")
         except Exception as error:
             print(f"Ошибка для [{company_name}]: {error}")
-
-        # Делаем паузу между запросами к API
+        # Пауза между запросами к API
         time.sleep(random.uniform(1, 2))
 
     print(f"Сгенерировано КП: {len(generated_items)} из {total_count} компаний")
