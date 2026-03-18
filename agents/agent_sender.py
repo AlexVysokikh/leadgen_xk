@@ -1,65 +1,103 @@
-"""Агент имитации отправки коммерческих предложений."""
+"""Агент отправки коммерческих предложений.
 
+Поведение:
+- Если TELEGRAM_BOT_TOKEN и TELEGRAM_CHAT_ID заданы — шлёт реальное уведомление менеджеру.
+- Если ключи не заданы — режим имитации (печать в консоль).
+"""
+import os
 import random
 import sys
 import time
 from pathlib import Path
 
-# Добавляем корень проекта в путь импортов для корректного импорта db.py
+import requests
+from dotenv import load_dotenv
+
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from db import get_companies_by_status, update_company
+load_dotenv(PROJECT_ROOT / ".env")
+
+from db import get_companies_by_status, update_company  # noqa: E402
+
+TELEGRAM_API_URL = "https://api.telegram.org/bot{token}/sendMessage"
+
+
+def _send_telegram(token: str, chat_id: str, text: str) -> bool:
+    url = TELEGRAM_API_URL.format(token=token)
+    payload = {"chat_id": chat_id, "text": text, "parse_mode": "HTML"}
+    try:
+        resp = requests.post(url, json=payload, timeout=10)
+        resp.raise_for_status()
+        return True
+    except requests.RequestException as e:
+        print(f"Telegram error: {e}")
+        return False
+
+
+def _build_message(company: dict) -> str:
+    name = company.get("name") or "?"
+    category = company.get("category") or "-"
+    address = company.get("address") or "-"
+    phone = company.get("phone") or "-"
+    email = company.get("email") or "-"
+    telegram = company.get("telegram") or "-"
+    website = company.get("website") or "-"
+    offer = company.get("offer_text") or "-"
+    return (
+        "<b>XK Media: новый лид для звонка</b>\n"
+        f"<b>{name}</b> | {category}\n"
+        f"📍 {address}\n"
+        f"📞 {phone}\n"
+        f"📧 {email}\n"
+        f"📬 {telegram}\n"
+        f"🌐 {website}\n"
+        f"\n<b>KP:</b>\n{offer}"
+    )
 
 
 def send_offers(batch: int = 20):
-    """Имитирует отправку коммерческих предложений компаниям со статусом approved."""
+    token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
+    chat_id = os.getenv("TELEGRAM_CHAT_ID", "").strip()
+    use_tg = bool(token and chat_id)
+
     try:
         companies = get_companies_by_status("approved", batch)
-    except Exception as error:
-        print(f"Ошибка при получении компаний для отправки: {error}")
+    except Exception as e:
+        print(f"DB error: {e}")
         return
 
     total = len(companies)
-    sent_count = 0
-
     if total == 0:
-        print("Нет компаний со статусом approved для отправки.")
-        print("Отправлено КП: 0 из 0 компаний")
+        print("Нет компаний approved.")
         return
 
+    sent = 0
     for company in companies:
-        company_id = company.get("id")
-        name = company.get("name") or "Без названия"
-        email = (company.get("email") or "").strip()
-        telegram = (company.get("telegram") or "").strip()
-        offer_text = company.get("offer_text") or ""
-
-        contact = email or telegram
-
-        print(f"📧 Имитация отправки КП для {name} на {contact or 'контакт не указан'}...")
-        print("--- Текст КП ---")
-        print(offer_text if offer_text else "Текст КП отсутствует")
-        print("----------------")
-
-        if contact:
-            try:
-                update_company(company_id, status="sent")
-                sent_count += 1
-                print(f"✅ КП успешно отправлено для {name}")
-            except Exception as error:
-                print(f"Ошибка при обновлении статуса компании {name}: {error}")
+        cid = company.get("id")
+        name = company.get("name") or "?"
+        offer = (company.get("offer_text") or "").strip()
+        if not offer:
+            print(f"Skip [{name}]: пустой КП")
+            continue
+        if use_tg:
+            ok = _send_telegram(token, chat_id, _build_message(company))
+            if ok:
+                update_company(cid, status="sent")
+                sent += 1
+                print(f"Sent TG: [{name}]")
+            else:
+                print(f"TG fail: [{name}]")
         else:
-            print(f"⚠️ Нет контактов для {name}")
-            try:
-                update_company(company_id, status="error")
-            except Exception as error:
-                print(f"Ошибка при обновлении статуса компании {name}: {error}")
+            print(f"[sim] [{name}]: {offer[:80]}")
+            update_company(cid, status="sent")
+            sent += 1
+            time.sleep(random.uniform(0.3, 0.7))
+        time.sleep(random.uniform(0.5, 1.0))
 
-        time.sleep(random.uniform(3, 5))
-
-    print(f"Отправлено КП: {sent_count} из {total} компаний")
+    mode = "Telegram" if use_tg else "имитация"
+    print(f"Отправлено: {sent} / {total} ({mode})")
 
 
 if __name__ == '__main__':
