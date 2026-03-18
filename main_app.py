@@ -37,6 +37,13 @@ except ImportError as e:
 
 try:
     from db import get_all_companies, get_companies_by_status, update_company, get_stats
+
+# Инициализируем БД при запуске приложения
+try:
+    from db import init_db
+    init_db()
+except ImportError as e:
+    st.error(f"❌ Ошибка инициализации БД: {e}")
 except ImportError as e:
     st.error(f"❌ Ошибка импорта db: {e}")
     get_all_companies = get_companies_by_status = update_company = get_stats = None
